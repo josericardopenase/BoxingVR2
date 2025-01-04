@@ -2,8 +2,17 @@ import * as THREE from 'three';
 import { VRButton } from "three/examples/jsm/webxr/VRButton.js";
 import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerModelFactory.js";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import "./style.css"
 
-const sphere = new THREE.SphereGeometry(0.2);
+window.onload = () => {
+    const button = document.getElementById("VRButton");
+    if(button){
+        button.innerText = "Start playing"
+    }
+}
+
+
+const sphere = new THREE.SphereGeometry(0);
 const mat = new THREE.MeshBasicMaterial({
     color: 0xffffff
 });
@@ -13,6 +22,7 @@ bag.position.set(0, 3, -1.3)
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0.21, 2, 2)
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -48,6 +58,12 @@ loader.load("/ring/scene.gltf", (gltf) => {
     scene.add(gltf.scene);
     gltf.scene.position.set(0, -0.8, 0);
     gltf.scene.scale.set(0.9, 0.9, 0.9);
+});
+
+loader.load("/garage/scene.gltf", (gltf) => {
+    scene.add(gltf.scene);
+    gltf.scene.position.set(0, 2, 0);
+    gltf.scene.scale.set(0.5, 0.5, 0.5);
 });
 
 loader.load("/glove/scene.gltf", (gltf) => {
@@ -87,15 +103,22 @@ scene.add(bag)
 
 
 
+
 class Rigidbody{
     public w = [0, 0]
     public mesh : THREE.Mesh
     public torque : ((mesh: Rigidbody) => number[])[]
     public mass : number = 1;
+    public momentOfInertia : (mass: number, mesh: THREE.Mesh) => number
 
     constructor(mesh : THREE.Mesh) {
         this.mesh = mesh;
         this.torque = []
+        this.momentOfInertia = (mass) => mass
+    }
+
+    public setMomentOfInertia(eq: (mass: number, mesh: THREE.Mesh) => number) {
+        this.momentOfInertia = eq;
     }
 
     public addTorque(t:(mesh: Rigidbody) => number[]){
@@ -117,15 +140,17 @@ class Rigidbody{
             const torque = y(this)
             return [x[0] + torque[0], x[1] + torque[1]]
         }, [0, 0])
-        this.w = [this.w[0] + totalTorque[0]*dt/this.mass, this.w[1] + totalTorque[1]*dt/this.mass]
+        this.w = [this.w[0] + totalTorque[0]*dt/this.momentOfInertia(this.mass, this.mesh), this.w[1] + totalTorque[1]*dt/this.momentOfInertia(this.mass, this.mesh)]
         this.mesh.rotation.set(this.mesh.rotation.x+this.w[0], 0, this.mesh.rotation.z+this.w[1])
     }
 
 }
 
 const rb = new Rigidbody(bag)
+rb.setMomentOfInertia((mass, mesh) => mass*(1/2)*mesh.scale.y)
+rb.mass = 20
 
-const punchForce = 0.05;
+const punchForce = 0.01;
 
 //oscilador armonico
 rb.addTorque((rb) => [-rb.mesh.rotation.x*5/9.8, -rb.mesh.rotation.z*5/9.8])
