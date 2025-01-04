@@ -34,6 +34,7 @@ audioLoader.load( '/epic.mp3', function( buffer ) {
     sound2.setBuffer( buffer );
     sound2.setVolume(0.4);
     sound2.play(5)
+    // @ts-ignore
     sound2.loop(true)
 });
 
