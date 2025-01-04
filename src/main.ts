@@ -4,12 +4,6 @@ import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerM
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import "./style.css"
 
-window.onload = () => {
-    const button = document.getElementById("VRButton");
-    if(button){
-        button.innerText = "Start playing"
-    }
-}
 
 
 const sphere = new THREE.SphereGeometry(0);
@@ -23,6 +17,34 @@ bag.position.set(0, 3, -1.3)
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0.21, 2, 2)
+const listener = new THREE.AudioListener();
+camera.add( listener );
+
+const sound = new THREE.Audio( listener );
+const sound2 = new THREE.Audio( listener );
+
+// load a sound and set it as the Audio object's buffer
+const audioLoader = new THREE.AudioLoader();
+audioLoader.load( '/punch2.mp3', function( buffer ) {
+    sound.setBuffer( buffer );
+    sound.setVolume(1 );
+});
+
+audioLoader.load( '/epic.mp3', function( buffer ) {
+    sound2.setBuffer( buffer );
+    sound2.setVolume(0.4);
+    sound2.play(5)
+    sound2.loop(true)
+});
+
+window.onload = () => {
+    const button = document.getElementById("VRButton");
+    if(button){
+        button.innerText = "Start playing"
+    }
+
+}
+
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -150,18 +172,19 @@ const rb = new Rigidbody(bag)
 rb.setMomentOfInertia((mass, mesh) => mass*(1/2)*mesh.scale.y)
 rb.mass = 20
 
-const punchForce = 0.01;
+const punchForce = 0.02;
 
 //oscilador armonico
-rb.addTorque((rb) => [-rb.mesh.rotation.x*5/9.8, -rb.mesh.rotation.z*5/9.8])
+rb.addTorque((rb) => [-rb.mesh.rotation.x*200/9.8, -rb.mesh.rotation.z*200/9.8])
 //oscilaciones atenuadas
-const gamma = 4
+const gamma = 60
 rb.addTorque((rb) => [-Math.pow(rb.w[0], 1)*gamma, -Math.pow(rb.w[1], 1)*gamma])
 bag.rotation.set(1, 0, 0)
 
 
 function checkCollisions() {
     if (bagBoundingBox.intersectsBox(gloveLeftBoundingBox)) {
+        const r = bag.position.y - controllerL.position.y;
         const dv = controllerL.position.clone().sub(rb.mesh.position);  // Displacement vector from the bag to the glove
         const normal = dv.clone().normalize();  // Normal vector pointing from the center of the bag to the point of collision
 
@@ -171,11 +194,17 @@ function checkCollisions() {
         // Applying torque in the direction of the normal (the vector pointing to the glove)
         // This creates a rotational force based on the angle between the collision direction and the bag's position
         const torque = new THREE.Vector3().crossVectors(dv, new THREE.Vector3(1, 0, 1)).normalize();  // A perpendicular vector
-        rb.w = [normal.z * punchForce * lVelocity, -normal.x * punchForce * lVelocity];
+        rb.w = [rb.w[0] + (normal.z * punchForce * Math.max(lVelocity, 0) * r), rb.w[1] + (-normal.x * punchForce * Math.max(lVelocity, 0) * r)];
         console.log(`Applied torque:`, torque);
         console.log(`Applied force magnitude: ${forceMagnitude}`);
+        if(lVelocity > 0.5){
+            sound.stop()
+            sound.setVolume(Math.max(lVelocity, 1))
+            sound.play()
+        }
     }
     if (bagBoundingBox.intersectsBox(gloveRightBoundingBox)) {
+        const r = bag.position.y - controllerR.position.y;
         const dv = controllerR.position.clone().sub(rb.mesh.position);  // Displacement vector from the bag to the glove
         const normal = dv.clone().normalize();  // Normal vector pointing from the center of the bag to the point of collision
 
@@ -185,10 +214,14 @@ function checkCollisions() {
         // Applying torque in the direction of the normal (the vector pointing to the glove)
         // This creates a rotational force based on the angle between the collision direction and the bag's position
         const torque = new THREE.Vector3().crossVectors(dv, new THREE.Vector3(1, 0, 1)).normalize();  // A perpendicular vector
-        rb.w = [normal.z * punchForce * rVelocity, -normal.x * punchForce * rVelocity];
+        rb.w = [rb.w[0] + (normal.z * punchForce * Math.max(rVelocity, 0) * r), rb.w[1] + (-normal.x * punchForce * Math.max(rVelocity, 0) * r)];
         console.log(`Applied torque:`, torque);
         console.log(`Applied force magnitude: ${forceMagnitude}`);
-
+        if(rVelocity > 0.5){
+            sound.stop()
+            sound.setVolume(Math.max(rVelocity, 1))
+            sound.play()
+        }
     }
 }
 let rVelocity = 0;
@@ -198,6 +231,7 @@ let rLastPosition = (controllerR).position.clone()
 let lLastPosition = controllerL.position.clone()
 
 
+
 const dt = 0.01
 function animate() {
     rb.updatePhysics(dt)
@@ -205,7 +239,6 @@ function animate() {
     rLastPosition = controllerR.position.clone()
     lVelocity = lLastPosition.clone().sub(controllerL.position).length()/0.02
     lLastPosition = controllerL.position.clone()
-    console.log(rVelocity)
     updateBoundingBoxes();
     checkCollisions();
     renderer.render(scene, camera);
